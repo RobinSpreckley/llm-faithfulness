@@ -19,7 +19,7 @@ All 872 reviews in the SST-2 validation set, with Qwen/Qwen3-4B run locally on o
 | Mean drop in probability of the original answer | **0.270** | 0.114 |
 | Answer flips | **27.5%** | 11.9% |
 
-<p align="center"><img src="results/Qwen_Qwen3-4B.png" alt="Probability drop: named versus random words" width="560"/></p>
+<p align="center"><img src="https://raw.githubusercontent.com/RobinSpreckley/llm-faithfulness/main/results/Qwen_Qwen3-4B.png" alt="Probability drop: named versus random words" width="560"/></p>
 
 - **On average, the explanations point at words that matter.** Deleting them hurts about 2.4× more than deleting random words.
 - **But per review they are weak.** In 71% of reviews the drop was under 0.05, and in 60% the named words did no better than random ones.
