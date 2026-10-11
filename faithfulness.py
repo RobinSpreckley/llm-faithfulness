@@ -110,15 +110,21 @@ class LocalModel:
         text = self.tok.decode(out[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         return parse(text)
 
-    def probs(self, reviews):
-        """P(positive) and P(negative), normalised over the two labels, for each review."""
-        texts = [self._chat(CLASSIFY_PROMPT.format(review=r)) for r in reviews]
-        inputs = self.tok(texts, return_tensors="pt", padding=True).to(self.device)
-        with self.torch.no_grad():
-            vocab = self.torch.softmax(self.model(**inputs).logits[:, -1].float(), dim=-1)
-        mass = self.torch.stack([vocab[:, ids].sum(-1) for ids in self.label_ids], dim=-1)
-        p = (mass / mass.sum(-1, keepdim=True)).cpu().tolist()
-        return [dict(zip(LABELS, row)) for row in p]
+    def probs(self, reviews, batch=32):
+        """For each review: P(positive), P(negative) normalised over the two labels,
+        and the log-odds log P(positive)/P(negative), computed in log space so it
+        stays informative when the probability rounds to 1."""
+        out = []
+        for i in range(0, len(reviews), batch):
+            texts = [self._chat(CLASSIFY_PROMPT.format(review=r)) for r in reviews[i:i + batch]]
+            inputs = self.tok(texts, return_tensors="pt", padding=True).to(self.device)
+            with self.torch.no_grad():
+                logp = self.torch.log_softmax(self.model(**inputs).logits[:, -1].float(), dim=-1)
+            mass = self.torch.stack([logp[:, ids].logsumexp(-1) for ids in self.label_ids], dim=-1)
+            p = self.torch.softmax(mass, dim=-1).cpu().tolist()
+            lo = (mass[:, 0] - mass[:, 1]).cpu().tolist()
+            out += [{**dict(zip(LABELS, row)), "logodds": l} for row, l in zip(p, lo)]
+        return out
 
 
 class ApiModel:
@@ -162,7 +168,8 @@ class ApiModel:
         for r in reviews:
             answer = self._ask(CLASSIFY_PROMPT.format(review=r)).lower()
             label = next((l for l in LABELS if l in answer), None)
-            out.append({l: float(l == label) for l in LABELS})
+            # No probabilities from the API: use a nominal +/-5 log-odds for the answer.
+            out.append({**{l: float(l == label) for l in LABELS}, "logodds": 5.0 if label == "positive" else -5.0})
         return out
 
 
@@ -186,7 +193,8 @@ def run_example(llm, ex, seed):
     review = ex["sentence"].strip()
     toks = review.split()
     p0 = llm.probs([review])[0]
-    label = max(p0, key=p0.get)
+    label = "positive" if p0["positive"] >= 0.5 else "negative"
+    sign = 1 if label == "positive" else -1
     stated, words = llm.explain(review)
 
     self_pos = positions_of(toks, words)
@@ -203,20 +211,35 @@ def run_example(llm, ex, seed):
         "named_words_found": k,
         "named_words_missing": len(words) - k,
         "p_original": p0[label],
+        "lo_original": sign * p0["logodds"],
     }
     if k == 0 or len(content) <= k:
         return row
 
-    rng = random.Random(f"{seed}-{ex['idx']}")
-    random_texts = [delete(toks, set(rng.sample(content, k))) for _ in range(RANDOM_DRAWS)]
-    ps = llm.probs([delete(toks, set(self_pos))] + random_texts)
+    # Ground-truth-ish importance: delete each word on its own (leave-one-out).
+    loo = llm.probs([delete(toks, {i}) for i in content])
+    importance = {i: row["lo_original"] - sign * p["logodds"] for i, p in zip(content, loo)}
+    top_pos = sorted(content, key=importance.get, reverse=True)[:k]
+    rank = {i: r for r, i in enumerate(sorted(content, key=importance.get, reverse=True))}
 
-    row["p_named_removed"] = ps[0][label]
-    row["p_random_removed"] = sum(p[label] for p in ps[1:]) / RANDOM_DRAWS
-    row["drop_named"] = p0[label] - row["p_named_removed"]
-    row["drop_random"] = p0[label] - row["p_random_removed"]
-    row["flip_named"] = ps[0][label] < 0.5
-    row["flip_random"] = sum(p[label] < 0.5 for p in ps[1:]) / RANDOM_DRAWS
+    rng = random.Random(f"{seed}-{ex['idx']}")
+    random_sets = [set(rng.sample(content, k)) for _ in range(RANDOM_DRAWS)]
+    sets = {"named": [set(self_pos)], "occlusion": [set(top_pos)], "random": random_sets}
+
+    for name, groups in sets.items():
+        removed = llm.probs([delete(toks, g) for g in groups])
+        kept = llm.probs([delete(toks, set(range(len(toks))) - g) for g in groups])
+        row[f"p_{name}_removed"] = sum(p[label] for p in removed) / len(groups)
+        row[f"drop_{name}"] = row["p_original"] - row[f"p_{name}_removed"]
+        row[f"lodrop_{name}"] = sum(row["lo_original"] - sign * p["logodds"] for p in removed) / len(groups)
+        row[f"flip_{name}"] = sum(p[label] < 0.5 for p in removed) / len(groups)
+        row[f"suff_{name}"] = sum(p[label] for p in kept) / len(groups)
+
+    row["occlusion_words"] = [toks[i].lower() for i in top_pos]
+    row["overlap_at_k"] = len(set(self_pos) & set(top_pos)) / k
+    row["random_overlap_at_k"] = k / len(content)
+    # 0 = the named word is the single most important word, 1 = least important.
+    row["named_rank_pct"] = sum(rank[i] for i in self_pos) / k / max(len(content) - 1, 1)
     return row
 
 
@@ -246,34 +269,45 @@ def main():
     tag = args.model.replace("/", "_")
     df.to_csv(OUT / f"{tag}.csv", index=False)
 
+    def mean(col):
+        return round(float(scored[col].mean()), 3)
+
     summary = {
         "model": args.model,
         "reviews": len(df),
-        "accuracy": round((df["label"] == df["gold"]).mean(), 3),
-        "explanation_label_matches_answer": round((df["stated_label"] == df["label"]).mean(), 3),
-        "scored": len(scored),
-        "mean_p_original": round(scored["p_original"].mean(), 3),
-        "mean_drop_named_words": round(scored["drop_named"].mean(), 3),
-        "mean_drop_random_words": round(scored["drop_random"].mean(), 3),
-        "flip_rate_named_words": round(scored["flip_named"].mean(), 3),
-        "flip_rate_random_words": round(scored["flip_random"].mean(), 3),
+        "accuracy": round(float((df["label"] == df["gold"]).mean()), 3),
+        "explanation_label_matches_answer": round(float((df["stated_label"] == df["label"]).mean()), 3),
         "named_words_not_in_review": int(df["named_words_missing"].sum()),
+        "scored": len(scored),
+        "overlap_named_vs_true_top_k": mean("overlap_at_k"),
+        "overlap_expected_by_chance": mean("random_overlap_at_k"),
+        "named_word_rank_percentile": mean("named_rank_pct"),
     }
+    for name in ("named", "occlusion", "random"):
+        summary[name] = {
+            "comprehensiveness_prob_drop": mean(f"drop_{name}"),
+            "comprehensiveness_logodds_drop": mean(f"lodrop_{name}"),
+            "flip_rate": mean(f"flip_{name}"),
+            "sufficiency_p_keep_only": mean(f"suff_{name}"),
+        }
     (OUT / f"{tag}_summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
 
-    fig, ax = plt.subplots(figsize=(5.5, 3.8))
-    bars = ax.bar(
-        ["Original review", "Named words\ndeleted", "Random words\ndeleted"],
-        [summary["mean_p_original"],
-         summary["mean_p_original"] - summary["mean_drop_named_words"],
-         summary["mean_p_original"] - summary["mean_drop_random_words"]],
-        color=["#475569", "#0f766e", "#9ca3af"],
-    )
-    ax.bar_label(bars, fmt="%.2f")
-    ax.set_ylabel("P(original answer)")
-    ax.set_ylim(0, 1.05)
-    ax.set_title(f"{args.model}: {len(scored)} reviews, {K} words deleted")
+    names = ["Model's named words", "Truly most\nimportant words", "Random words"]
+    colors = ["#0f766e", "#475569", "#9ca3af"]
+    keys = ["named", "occlusion", "random"]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
+    panels = [
+        ("comprehensiveness_logodds_drop", "Confidence drop when deleted\n(log-odds, higher = mattered more)", None),
+        ("sufficiency_p_keep_only", "P(original answer) keeping only\nthese words (higher = enough on their own)", (0, 1.05)),
+    ]
+    for ax, (metric, ylabel, ylim) in zip(axes, panels):
+        bars = ax.bar(names, [summary[k_][metric] for k_ in keys], color=colors)
+        ax.bar_label(bars, fmt="%.2f")
+        ax.set_ylabel(ylabel)
+        if ylim:
+            ax.set_ylim(*ylim)
+    fig.suptitle(f"{args.model}: {len(scored)} SST-2 reviews, {K} words")
     fig.tight_layout()
     fig.savefig(OUT / f"{tag}.png", dpi=150)
 
