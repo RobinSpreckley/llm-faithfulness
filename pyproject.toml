@@ -3,10 +3,13 @@ name = "llm-faithfulness"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "accelerate>=1.15.0",
     "anthropic>=1.13.0",
     "datasets>=5.1.0",
     "matplotlib>=3.11.2",
     "openai>=3.28.0",
     "pandas>=3.0.6",
+    "torch>=2.14.1",
+    "transformers>=4.51",
 ]
 

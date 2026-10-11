@@ -1,0 +1,13 @@
+{
+  "model": "Qwen/Qwen3-4B",
+  "reviews": 872,
+  "accuracy": 0.935,
+  "explanation_label_matches_answer": 0.984,
+  "scored": 867,
+  "mean_p_original": 0.996,
+  "mean_drop_named_words": 0.27,
+  "mean_drop_random_words": 0.114,
+  "flip_rate_named_words": 0.275,
+  "flip_rate_random_words": 0.119,
+  "named_words_not_in_review": 69
+}
