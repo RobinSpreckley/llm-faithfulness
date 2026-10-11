@@ -1,6 +1,6 @@
-"""Are Claude's self-explanations faithful?
+"""Are an LLM's self-explanations faithful?
 
-Claude labels a review's sentiment and names the words that most influenced
+The model labels a review's sentiment and names the words that most influenced
 its answer. We delete those words and ask again. If the explanation is
 faithful, the answer should change far more often than when we delete the
 same number of random words.
@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import anthropic
+import openai
 import matplotlib
 
 matplotlib.use("Agg")
@@ -53,12 +54,13 @@ def load_env():
                 os.environ.setdefault(key.strip(), value.strip().strip('"'))
 
 
-class Claude:
-    """Calls the API, caching every response on disk so reruns are free."""
+class Model:
+    """Calls Claude or GPT, caching every response on disk so reruns are free."""
 
     def __init__(self, model):
         self.model = model
-        self.client = anthropic.Anthropic()
+        self.is_claude = model.startswith("claude")
+        self.client = anthropic.Anthropic() if self.is_claude else openai.OpenAI()
         self.cache = {}
         self.lock = threading.Lock()
         if CACHE.exists():
@@ -70,12 +72,13 @@ class Claude:
         prompt = PROMPT.format(review=review, k=K)
         key = hashlib.sha256(f"{self.model}\n{prompt}".encode()).hexdigest()
         if key not in self.cache:
-            msg = self.client.messages.create(
-                model=self.model,
-                max_tokens=200,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = msg.content[0].text
+            messages = [{"role": "user", "content": prompt}]
+            if self.is_claude:
+                msg = self.client.messages.create(model=self.model, max_tokens=200, messages=messages)
+                text = msg.content[0].text
+            else:
+                resp = self.client.chat.completions.create(model=self.model, messages=messages)
+                text = resp.choices[0].message.content
             with self.lock:
                 self.cache[key] = text
                 with CACHE.open("a") as f:
@@ -114,10 +117,10 @@ def positions_of(toks, words):
     return found
 
 
-def run_example(claude, ex, seed):
+def run_example(llm, ex, seed):
     review = ex["sentence"].strip()
     toks = tokens(review)
-    label, words = claude.ask(review)
+    label, words = llm.ask(review)
     if label is None:
         return None
 
@@ -137,14 +140,14 @@ def run_example(claude, ex, seed):
     if k == 0 or len(content) <= k:
         return row
 
-    after_self, _ = claude.ask(delete(toks, set(self_pos)))
+    after_self, _ = llm.ask(delete(toks, set(self_pos)))
     row["self_flip"] = after_self != label
 
     rng = random.Random(f"{seed}-{ex['idx']}")
     flips = []
     for _ in range(RANDOM_DRAWS):
         pos = set(rng.sample(content, k))
-        after_rand, _ = claude.ask(delete(toks, pos))
+        after_rand, _ = llm.ask(delete(toks, pos))
         flips.append(after_rand != label)
     row["random_flip"] = sum(flips) / len(flips)
     return row
@@ -152,19 +155,19 @@ def run_example(claude, ex, seed):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="claude-opus-5-5")
+    ap.add_argument("--model", required=True, help="e.g. claude-opus-5-5 or an OpenAI model id")
     ap.add_argument("--n", type=int, default=50, help="number of SST-2 validation reviews")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--workers", type=int, default=8)
     args = ap.parse_args()
 
     load_env()
-    claude = Claude(args.model)
+    llm = Model(args.model)
     data = load_dataset("stanfordnlp/sst2", split="validation")
     examples = data.shuffle(seed=args.seed).select(range(args.n))
 
     with ThreadPoolExecutor(args.workers) as pool:
-        rows = [r for r in pool.map(lambda ex: run_example(claude, ex, args.seed), examples) if r]
+        rows = [r for r in pool.map(lambda ex: run_example(llm, ex, args.seed), examples) if r]
 
     df = pd.DataFrame(rows)
     scored = df.dropna(subset=["self_flip"])
@@ -185,7 +188,7 @@ def main():
     print(json.dumps(summary, indent=2))
 
     fig, ax = plt.subplots(figsize=(5, 3.5))
-    ax.bar(["Words Claude named", "Random words"],
+    ax.bar(["Words the model named", "Random words"],
            [summary["flip_rate_named_words"], summary["flip_rate_random_words"]],
            color=["#0f766e", "#9ca3af"])
     ax.set_ylabel("Answer changed after deleting them")
