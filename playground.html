@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faithfulness Playground</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 28 28%22%3E%3Cpath d=%22M14 4 L24 14 L14 24 L4 14 Z%22 fill=%22%2314B8A6%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F8F7; --card: #FFFFFF; --ink: #10201E; --muted: #5B6F6C; --line: #D8E4E1;
+    --teal: #14B8A6; --teal-ink: #0F766E; --pink: #F28AB2; --pink-ink: #B83D6E;
+    --chip: #EEF3F2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0B1716; --card: #102220; --ink: #E3F1EE; --muted: #8FA9A4; --line: #22403C;
+      --teal-ink: #5EEAD4; --pink-ink: #F9A8C9; --chip: #17302D;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 Inter, system-ui, sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1, h2, .px { font-family: VT323, ui-monospace, monospace; font-weight: 400; letter-spacing: .5px; }
+  h1 { color: var(--teal); font-size: 44px; margin: 0; line-height: 1; }
+  h2 { font-size: 24px; margin: 0 0 10px; color: var(--teal-ink); }
+  .sub { color: var(--muted); margin: 6px 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  textarea { width: 100%; min-height: 90px; resize: vertical; padding: 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+  textarea:focus { outline: 2px solid var(--teal); border-color: transparent; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  button { font: inherit; font-size: 14px; border-radius: 8px; padding: 7px 12px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--chip); color: var(--ink); }
+  button:hover { border-color: var(--teal); }
+  button.primary { background: var(--teal); color: #04201C; border-color: var(--teal); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .examples { color: var(--muted); font-size: 13px; }
+  .examples button { font-size: 13px; padding: 4px 9px; }
+  .status { color: var(--muted); font-size: 14px; }
+  .hidden { display: none; }
+
+  .verdicts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .verdicts { grid-template-columns: 1fr; } }
+  .verdict { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .verdict .label { font-size: 13px; color: var(--muted); }
+  .verdict .answer { font-family: VT323, monospace; font-size: 34px; line-height: 1.1; }
+  .pos { color: var(--teal-ink); } .neg { color: var(--pink-ink); }
+  .nums { font-size: 13px; color: var(--muted); }
+  .flip { display: inline-block; margin-left: 6px; font-size: 12px; font-weight: 600; padding: 1px 7px;
+    border-radius: 99px; background: var(--pink); color: #3B0A1F; vertical-align: middle; }
+
+  .meter { position: relative; height: 12px; border-radius: 99px; margin: 26px 0 6px;
+    background: linear-gradient(90deg, var(--pink), var(--chip) 50%, var(--teal)); }
+  .marker { position: absolute; top: -5px; width: 4px; height: 22px; border-radius: 2px; transform: translateX(-2px); transition: left .25s; }
+  .marker.orig { background: var(--muted); opacity: .55; }
+  .marker.orig span { top: 22px; }
+  .marker.same span { display: none; }
+  .marker.now { background: var(--ink); }
+  .marker span { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 11px; white-space: nowrap; color: var(--muted); }
+  .scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+
+  .said { margin: 4px 0 14px; }
+  .said .w { display: inline-block; font-family: VT323, monospace; font-size: 20px; padding: 0 8px; margin: 2px 3px;
+    border: 2px solid var(--teal); border-radius: 6px; }
+  .said .w.missing { border-color: var(--pink); text-decoration: line-through; }
+  .note { font-size: 13px; color: var(--muted); }
+
+  .words { line-height: 2.5; margin-top: 4px; }
+  .tok { display: inline-block; padding: 0 7px; margin: 0 2px; border-radius: 6px; cursor: pointer; user-select: none;
+    border: 2px solid transparent; line-height: 1.8; position: relative; transition: opacity .15s; }
+  .tok.named { border-color: var(--ink); }
+  .tok.named::after { content: "◆"; position: absolute; top: -12px; right: -4px; font-size: 10px; color: var(--teal-ink); }
+  .tok.gone { opacity: .35; text-decoration: line-through; }
+  .tok:focus-visible { outline: 2px solid var(--teal); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+  .chat { margin: 0 0 14px; }
+  .msg { border-radius: 10px; padding: 10px 12px; margin: 6px 0; white-space: pre-wrap; font: 13px/1.5 ui-monospace, monospace; }
+  .msg.you { background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
+  .msg.llm { background: var(--chip); border-left: 3px solid var(--teal); }
+  .who { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  .tabs { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); margin: 18px 0 8px; }
+  .tabs button { border: 0; background: transparent; font-family: VT323, monospace; font-size: 20px; padding: 2px 14px; }
+  .tabs button.on { background: var(--teal); color: #04201C; }
+  .replies { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .replies { grid-template-columns: 1fr; } }
+  .replies .msg { margin: 0; min-height: 60px; }
+  .ask { font-size: 13px; color: var(--muted); margin: 0 0 6px; word-break: break-word; }
+  ins { background: rgba(20,184,166,.28); text-decoration: none; border-radius: 3px; }
+  del { background: rgba(242,138,178,.35); border-radius: 3px; margin-right: 3px; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 99px; margin-left: 6px; }
+  .badge.same { background: var(--chip); color: var(--muted); }
+  .badge.changed { background: var(--pink); color: #3B0A1F; }
+  .knobs { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 14px; color: var(--muted); margin-top: 12px; }
+  .knobs input[type=range] { accent-color: var(--teal); width: 140px; vertical-align: middle; }
+  .knobs select { font: inherit; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .knobs b { color: var(--ink); font-weight: 600; }
+  .sample { position: relative; margin: 8px 0; }
+  .sample .sim { position: absolute; top: 6px; right: 8px; font: 600 11px Inter, sans-serif; padding: 1px 7px; border-radius: 99px; background: var(--card); color: var(--muted); }
+  .sample .msg { padding-right: 88px; }
+  .big { font-family: VT323, monospace; font-size: 30px; line-height: 1; color: var(--teal-ink); }
+  .tok.swapped { border: 2px dashed var(--teal-ink); }
+  .tok .was { font-size: 11px; color: var(--muted); text-decoration: line-through; margin-right: 4px; }
+  .pop { position: absolute; z-index: 6; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; width: 290px; }
+  .pop.hidden { display: none; }
+  .pop input { flex: 1 1 100%; font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .pop input:focus { outline: 2px solid var(--teal); border-color: transparent; }
+  .pop .note { flex: 1 1 100%; margin: 0; }
+  .pairs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 10px; }
+  .pairs .head { font-size: 12px; color: var(--muted); }
+  @media (max-width: 600px) { .pairs { grid-template-columns: 1fr; } .pairs .head { display: none; } .pairs .pairno { margin-top: 10px; } }
+  .pairno { grid-column: 1 / -1; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 8px; }
+  .swapbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 6px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .swapbar input { width: 130px; font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .swapbar input:focus { outline: 2px solid var(--teal); border-color: transparent; }
+  .swapbar .note { margin: 0; }
+  .headrow { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .headrow h2 { margin: 0; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: transparent; font-size: 13px; padding: 5px 10px; }
+  .seg button.on { background: var(--teal); color: #04201C; font-weight: 600; }
+  .summary { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px 28px; margin-bottom: 8px; }
+  .stat .big { font-size: 26px; }
+  .stat .note { margin: 0; }
+  .only { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+  @media (max-width: 600px) { .only { grid-template-columns: 1fr; } }
+  .kw { display: inline-block; font-size: 13px; padding: 1px 8px; margin: 3px 3px 0 0; border-radius: 99px; }
+  .kw.a { background: rgba(242,138,178,.35); } .kw.b { background: rgba(20,184,166,.3); }
+  .md { white-space: normal; }
+  .md p { margin: 0 0 8px; } .md p:last-child { margin: 0; }
+  .md .h { display: block; font-weight: 700; margin: 10px 0 4px; }
+  .md ul, .md ol { margin: 0 0 8px; padding-left: 20px; }
+  table.kwt { border-collapse: collapse; font-size: 13px; margin: 10px 0; width: 100%; }
+  .kwt th, .kwt td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  .kwt th { color: var(--muted); font-weight: 500; }
+  .bar { display: inline-block; height: 8px; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
+  #pairs-wrap { margin-top: 10px; }
+  .tone { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--chip); color: var(--ink); white-space: nowrap; }
+  table.eff { border-collapse: collapse; font-size: 13px; margin: 6px 0 14px; width: 100%; }
+  .eff th, .eff td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .eff th { color: var(--muted); font-weight: 500; }
+  .eff .yes { color: var(--teal-ink); font-weight: 600; } .eff .no { color: var(--muted); }
+  @media (max-width: 600px) { .eff .strip { display: none; } }
+  .pushmap { white-space: pre-wrap; line-height: 1.9; }
+  .pushmap span { border-radius: 3px; cursor: default; }
+  .pushmap .first { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .alt { font-family: ui-monospace, monospace; font-size: 12px; background: var(--chip); padding: 0 5px; border-radius: 4px; white-space: pre; }
+  :root { --t1: #8FD9CF; --t2: #3FBFAE; --t3: #13998A; --t4: #0B5F57; --p1: #F6C1D5; --p2: #EE8FB2; --p3: #D45A8A; --p4: #9E2F5D; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --t1: #3F9488; --t2: #36BCAB; --t3: #5EEAD4; --t4: #B8F7EE; --p1: #A65579; --p2: #CF6F98; --p3: #F29BBC; --p4: #FDD9E6; } }
+  .cloud { position: relative; height: 380px; border: 1px solid var(--line); border-radius: 12px;
+    background: radial-gradient(ellipse at center, var(--card) 0%, var(--bg) 75%); overflow: hidden; }
+  .cloud svg { width: 100%; height: 100%; display: block; }
+  @media (max-width: 600px) { .cloud { height: 280px; } }
+  .cloud text { font-family: Inter, system-ui, sans-serif; font-weight: 700; cursor: default; transition: opacity .15s; }
+  .cloud .c1 { fill: var(--t1); } .cloud .c2 { fill: var(--t2); } .cloud .c3 { fill: var(--t3); } .cloud .c4 { fill: var(--t4); }
+  .cloud .n1 { fill: var(--p1); } .cloud .n2 { fill: var(--p2); } .cloud .n3 { fill: var(--p3); } .cloud .n4 { fill: var(--p4); }
+  .cloud rect.mark { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .clouds.hovering text { opacity: .25; }
+  .clouds.hovering text.hit { opacity: 1; }
+  .dumb { display: grid; grid-template-columns: minmax(80px, max-content) 1fr 70px; gap: 2px 12px; align-items: center; font-size: 13px; margin: 6px 0 14px; }
+  .dumb .hd { color: var(--muted); font-size: 12px; }
+  .dumb .w { font-weight: 600; white-space: nowrap; }
+  .dumb .track { position: relative; height: 22px; }
+  .dumb .axis { position: absolute; top: 10px; left: 0; right: 0; height: 2px; background: var(--line); }
+  .dumb .zero { position: absolute; top: 3px; width: 1px; height: 16px; background: var(--muted); opacity: .6; }
+  .dumb .seg { position: absolute; top: 9px; height: 4px; border-radius: 2px; background: var(--muted); opacity: .45; }
+  .dumb .dot { position: absolute; top: 5px; width: 12px; height: 12px; border-radius: 50%; transform: translateX(-6px); }
+  .dumb .dot.a { background: #F28AB2; } .dumb .dot.b { background: #14B8A6; }
+  .dumb .d { text-align: right; font-variant-numeric: tabular-nums; }
+  .dumb .up { color: var(--teal-ink); } .dumb .down { color: var(--pink-ink); }
+  .dumb .legend2 { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+  .cloud .empty { position: absolute; inset: 0; display: grid; place-items: center; }
+  .info { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; margin-left: 4px;
+    border-radius: 50%; border: 1px solid var(--teal-ink); background: transparent; color: var(--teal-ink);
+    font: 600 11px/1 Inter, sans-serif; vertical-align: middle; cursor: pointer; letter-spacing: 0; }
+  .info:hover, .info[aria-expanded="true"] { background: var(--teal); color: #04201C; border-color: var(--teal); }
+  .info-demo { display: inline-block; width: 16px; height: 16px; line-height: 15px; text-align: center; border-radius: 50%;
+    border: 1px solid var(--teal-ink); color: var(--teal-ink); font-size: 11px; font-weight: 600; }
+  .explain { font: 13.5px/1.55 Inter, sans-serif; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-left: 3px solid var(--teal); border-radius: 8px; padding: 10px 14px; margin: 8px 0 12px; letter-spacing: 0; text-transform: none; }
+  .explain h4 { margin: 0 0 6px; font: 600 14px Inter, sans-serif; }
+  .explain dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+  .explain dt { color: var(--muted); font-size: 12px; padding-top: 2px; }
+  .explain dd { margin: 0; }
+  @media (max-width: 600px) { .explain dl { grid-template-columns: 1fr; } .explain dd { margin-bottom: 6px; } }
+  .guide { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin: -8px 0 18px; font-size: 14px; }
+  .guide summary { cursor: pointer; font-weight: 600; color: var(--teal-ink); }
+  .guide ol { margin: 10px 0 6px; padding-left: 20px; } .guide li { margin-bottom: 4px; } .guide p { margin: 4px 0 2px; color: var(--muted); }
+  /* Long unbroken strings in a reply must wrap, never widen the page. */
+  .replies > div, .pairs > *, .only > div, .verdicts > div { min-width: 0; }
+  .msg, .ask, .kw, .alt, .dumb .w { overflow-wrap: anywhere; }
+  .dumb .w { white-space: normal; }
+  body { overflow-x: hidden; }
+  .tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px;
+    padding: 5px 8px; border-radius: 6px; max-width: 260px; z-index: 5; }
+</style>
+</head>
+<body>
+<main>
+  <h1>FAITHFULNESS PLAYGROUND</h1>
+  <div class="tabs" role="tablist">
+    <button class="on" data-mode="sentiment">Sentiment test</button>
+    <button data-mode="task">Any task</button>
+  </div>
+  <p class="sub" id="sub-sentiment">Type a review. The model labels it and names the words it says mattered. Click words to delete or change them and see whether the answer actually changes. Model: <span class="px" style="font-size:18px">{{MODEL}}</span></p>
+  <details class="guide" id="guide-sentiment"><summary>How to use this page</summary>
+    <ol>
+      <li><b>Type a review</b> and press Analyse. The model labels it positive or negative.</li>
+      <li>It also names the words it says drove its answer. That's its <b>explanation</b>.</li>
+      <li>We then delete each word one at a time and measure how much the answer moves. That's <b>what actually matters</b>.</li>
+      <li>If the explanation is <b>faithful</b>, the words it named should be the ones that move the answer most. Click words to delete or change them and test it yourself.</li>
+    </ol>
+    <p>Press any <span class="info-demo">?</span> for what a number means.</p>
+  </details>
+  <p class="sub hidden" id="sub-task">Ask the model to do anything. It replies, then says which words of your request mattered. Click words to delete or change them and see how the reply changes. Model: <span class="px" style="font-size:18px">{{MODEL}}</span></p>
+  <details class="guide hidden" id="guide-task"><summary>How to use this page</summary>
+    <ol>
+      <li><b>Type a request</b> and press Run. The model writes a reply.</li>
+      <li><b>Edit the request:</b> swap a word everywhere (e.g. son → daughter), or click any word in the coloured word list to delete or change it.</li>
+      <li>Compare the two replies: <b>what changed</b>, <b>where</b> in the reply the edit pushed the model, and which request words <b>drove</b> each reply.</li>
+      <li>Turn <b>temperature</b> up to check the change is bigger than the model's normal randomness. Use 16 samples or more for a fair test.</li>
+    </ol>
+    <p>Press any <span class="info-demo">?</span> for what a number means.</p>
+  </details>
+
+<div id="mode-sentiment">
+  <section class="card">
+    <textarea id="text" placeholder="e.g. a gorgeous, witty and seductive movie">the acting is wooden and the plot is a mess , but the soundtrack is genuinely beautiful .</textarea>
+    <div class="row">
+      <button class="primary" id="go">Analyse</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="row examples">Try:
+      <button data-ex="a gorgeous , witty , seductive movie .">gorgeous, witty</button>
+      <button data-ex="it 's not that the film is bad , it 's just painfully forgettable .">not bad, forgettable</button>
+      <button data-ex="i expected to hate it , and somehow i loved every minute .">expected to hate it</button>
+      <button data-ex="the director has never been better , which is to say not very good .">backhanded</button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="result">
+    <h2>◆ answer <button class="info" data-info="s-answer" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+    <div class="verdicts">
+      <div class="verdict"><div class="label">Original review</div><div class="answer" id="a0"></div><div class="nums" id="n0"></div></div>
+      <div class="verdict"><div class="label">With your edits</div><div class="answer" id="a1"></div><div class="nums" id="n1"></div></div>
+    </div>
+    <div class="meter" aria-hidden="true" style="margin-bottom: 26px">
+      <div class="marker orig" id="m0"><span>original</span></div>
+      <div class="marker now" id="m1"><span>now</span></div>
+    </div>
+    <div class="scale"><span>sure negative</span><span>unsure</span><span>sure positive</span></div>
+  </section>
+
+  <section class="card hidden" id="chat-card">
+    <h2>◆ what the model said <button class="info" data-info="s-chat" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+    <p class="note">The exact questions sent to the model and its replies, word for word.</p>
+    <div class="chat" id="chat"></div>
+  </section>
+
+  <section class="card hidden" id="words-card">
+    <h2>◆ what the model says mattered <button class="info" data-info="s-named" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+    <div class="said" id="said"></div>
+    <h2>◆ what actually matters <button class="info" data-info="s-importance" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+    <p class="note">Each word is coloured by how much deleting it on its own moves the model. Hover for the number, click a word to delete or change it. ◆ marks the words the model named.</p>
+    <div class="words" id="words"></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--teal)"></span>pushes towards positive</span>
+      <span><span class="sw" style="background:var(--pink)"></span>pushes towards negative</span>
+      <span><span class="sw" style="background:var(--chip)"></span>barely matters</span>
+    </div>
+    <div class="row">
+      <button id="del-named">Delete the model's words</button>
+      <button id="del-top">Delete the truly top words</button>
+      <button id="del-rand">Delete random words</button>
+      <button id="reset">Reset</button>
+      <button id="reask">Ask again about the edited text</button>
+    </div>
+    <p class="note" id="compare"></p>
+  </section>
+</div>
+
+<div id="mode-task" class="hidden">
+  <section class="card">
+    <textarea id="ttext" placeholder="e.g. Write a haiku about autumn leaves.">Recommend one book for a nervous beginner who wants to learn to cook on a tight budget. Answer in two sentences.</textarea>
+    <div class="knobs">
+      <label>Temperature <input type="range" id="temp" min="0" max="1.5" step="0.1" value="0"> <b id="tempv">0 (always the same)</b></label>
+      <label id="nwrap" class="hidden">Samples <select id="nsamp"><option>3</option><option>5</option><option selected>8</option><option>16</option><option>32</option><option>64</option><option>128</option></select></label>
+      <button class="info" data-info="temp" aria-label="What does this show?" aria-expanded="false">?</button>
+    </div>
+    <div class="row">
+      <button class="primary" id="tgo">Run</button>
+      <span class="status" id="tstatus"></span>
+    </div>
+    <div class="swapbar">
+      <span class="note"><b>Edit:</b> swap a word</span>
+      <input id="sw-from" placeholder="sir" aria-label="Word to replace">
+      <span>→</span>
+      <input id="sw-to" placeholder="ma'am" aria-label="Replace with">
+      <button id="sw-go">Swap and compare</button>
+      <span class="note" id="sw-msg"></span>
+    </div>
+    <p class="note" style="margin:0">Or click any word in the coloured word list further down to delete or change just that one.</p>
+    <div class="row examples">Try:
+      <button data-tex="Write a haiku about autumn leaves falling in the rain.">haiku</button>
+      <button data-tex="What is 17 times 23? Answer with just the number.">maths</button>
+      <button data-tex="Translate into French: I would like a large coffee with milk, please.">translate</button>
+      <button data-tex="Is a tomato a fruit or a vegetable? Answer in one word.">tomato</button>
+      <button data-tex="My doctor says my blood pressure is slightly high. Give me two simple tips, briefly.">health tips</button>
+      <button data-tex="Suggest a career for my son, who loves maths and caring for people. Answer in one sentence." data-swap="son|daughter">son → daughter</button>
+      <button data-tex="Reply in two sentences to this customer email: Dear sir, the laptop I bought last week keeps crashing. What should I do?" data-swap="sir|madam">sir → madam</button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="treply-card">
+    <div class="headrow">
+      <h2>◆ replies <button class="info" data-info="replies" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+      <div class="seg" role="group" aria-label="Reply view">
+        <button class="on" data-view="plain">Side by side</button>
+        <button data-view="diff">Highlight changes</button>
+      </div>
+    </div>
+    <div class="summary hidden" id="tsummary"></div>
+    <div class="replies">
+      <div><div class="who">Your request <span class="tone" id="ttone0"></span></div><p class="ask" id="task0"></p><div class="msg llm" id="treply0"></div></div>
+      <div><div class="who">With your edits <span id="tbadge"></span> <span class="tone" id="ttone1"></span></div><p class="ask" id="task1"></p><div class="msg llm" id="treply1"></div></div>
+    </div>
+    <p class="note" id="tcompare"></p>
+  </section>
+
+  <section class="card hidden" id="tpush-card">
+    <h2>◆ where your edit pushes the reply <button class="info" data-info="push" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+    <p class="note">The original reply, word by word. At each word we compare what the model wanted to write next after your original request and after the edited one.
+      <b class="neg">Pink</b> = the edit pushes the model <i>away</i> from this word, <b class="pos">teal</b> = towards it; stronger colour = bigger push. Hover a word to see what the model would rather write instead.</p>
+    <div class="msg pushmap" id="pushmap"></div>
+    <div class="who">Biggest pushes <button class="info" data-info="pushtop" aria-label="What does this show?" aria-expanded="false">?</button></div>
+    <table class="kwt" id="pushtop"></table>
+    <div id="peredit"></div>
+  </section>
+
+  <section class="card hidden" id="tcloud-card">
+    <h2>◆ word clouds</h2>
+    <div class="who">Which words of the request drove each reply <button class="info" data-info="cloudreq" aria-label="What does this show?" aria-expanded="false">?</button></div>
+    <p class="note">Bigger = deleting that word alone changes the reply more. Teal = the reply needs it, pink = the reply would be more likely without it. Outlined = a word you edited.</p>
+    <div class="replies clouds">
+      <div><div class="who">Your request</div><div class="cloud" id="cloud-req0"></div></div>
+      <div><div class="who">With your edits</div><div class="cloud" id="cloud-req1"></div></div>
+    </div>
+    <div class="who">Biggest changes in importance</div>
+    <div class="dumb" id="dumb-req"></div>
+    <div class="who" style="margin-top:18px">Which words each reply uses more <button class="info" data-info="cloudrep" aria-label="What does this show?" aria-expanded="false">?</button></div>
+    <p class="note" id="cloud-reply-note"></p>
+    <div class="replies clouds">
+      <div><div class="who">Original reply</div><div class="cloud" id="cloud-rep0"></div></div>
+      <div><div class="who">Reply with your edits</div><div class="cloud" id="cloud-rep1"></div></div>
+    </div>
+    <div class="who" id="dumb-rep-title">Biggest changes in use</div>
+    <div class="dumb" id="dumb-rep"></div>
+  </section>
+
+  <section class="card hidden" id="tsample-card">
+    <h2>◆ randomness vs your edits <button class="info" data-info="sampling" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+    <p class="note" id="tsample-note"></p>
+    <div class="replies">
+      <div><div class="who">Your request, sampled</div><div class="big" id="sim0"></div><div class="note">of the words are the same as the reference reply, on average <button class="info" data-info="match" aria-label="What does this show?" aria-expanded="false">?</button></div></div>
+      <div><div class="who">With your edits, sampled</div><div class="big" id="sim1"></div><div class="note">of the words are the same as the reference reply, on average</div></div>
+    </div>
+    <p class="note" id="tsample-verdict"></p>
+    <div id="teffect"></div>
+    <div id="tkw"></div>
+    <details id="pairs-wrap"><summary>Show every sample, in pairs</summary><div class="pairs" id="pairs"></div></details>
+  </section>
+
+  <section class="card hidden" id="twords-card">
+    <h2>◆ what the model says mattered <button class="info" data-info="t-named" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+    <div class="who">Follow-up question</div>
+    <div class="msg you" id="texq"></div>
+    <div class="who">Model's reply</div>
+    <div class="msg llm" id="texr"></div>
+    <div class="said" id="tsaid"></div>
+    <h2>◆ what actually matters <button class="info" data-info="t-importance" aria-label="What does this show?" aria-expanded="false">?</button></h2>
+    <p class="note">Each word is coloured by how much deleting it on its own makes the model less likely to give its original reply. Hover for the number, click a word to delete or change it. ◆ marks the words the model named.</p>
+    <div class="words" id="twords"></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--teal)"></span>needed for the reply</span>
+      <span><span class="sw" style="background:var(--pink)"></span>deleting it makes the reply more likely</span>
+      <span><span class="sw" style="background:var(--chip)"></span>barely matters</span>
+    </div>
+    <div class="row">
+      <button id="tdel-named">Delete the model's words</button>
+      <button id="tdel-top">Delete the truly top words</button>
+      <button id="tdel-rand">Delete random words</button>
+      <button id="treset">Reset</button>
+    </div>
+  </section>
+</div>
+</main>
+<div class="tip hidden" id="tip"></div>
+<div class="pop hidden" id="pop" role="dialog" aria-label="Edit word">
+  <input id="pop-in" aria-label="Replace with">
+  <button class="primary" id="pop-swap">Change</button>
+  <button id="pop-del">Delete</button>
+  <button id="pop-undo">Restore</button>
+  <p class="note">Enter to change · Esc to close</p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const LO_RANGE = 10;  // meter runs from -10 to +10 log-odds
+
+async function postJSON(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+const post = (path, text) => postJSON(path, { text });
+const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+const pc = x => Math.round(x * 100) + "%";
+
+// ---------- Shared: word chips with an edit popover ----------
+// edits: Map position -> new word ("" = deleted).
+function edited(tokens, edits) { return tokens.map((t, i) => edits.has(i) ? edits.get(i) : t).filter(t => t !== ""); }
+function describe(edits) {
+  const del = [...edits.values()].filter(w => w === "").length, sw = edits.size - del;
+  return [del && `deleting ${del} word${del > 1 ? "s" : ""}`, sw && `changing ${sw} word${sw > 1 ? "s" : ""}`].filter(Boolean).join(" and ");
+}
+
+let popFor = null;
+function openPop(chip, word, edits, i, onChange) {
+  const pop = $("pop"), r = chip.getBoundingClientRect();
+  popFor = { edits, i, onChange };
+  $("pop-in").value = edits.has(i) && edits.get(i) !== "" ? edits.get(i) : word;
+  $("pop-undo").classList.toggle("hidden", !edits.has(i));
+  pop.classList.remove("hidden");
+  pop.style.top = window.scrollY + r.bottom + 6 + "px";
+  pop.style.left = Math.max(8, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 8)) + "px";
+  $("pop-in").focus(); $("pop-in").select();
+}
+function closePop() { $("pop").classList.add("hidden"); popFor = null; }
+function popApply(value) {
+  if (!popFor) return;
+  const { edits, i, onChange } = popFor;
+  if (value === null) edits.delete(i); else edits.set(i, value);
+  closePop(); onChange();
+}
+$("pop-swap").onclick = () => { const v = $("pop-in").value.trim(); popApply(v === "" ? "" : v); };
+$("pop-del").onclick = () => popApply("");
+$("pop-undo").onclick = () => popApply(null);
+$("pop-in").onkeydown = e => { if (e.key === "Enter") $("pop-swap").click(); if (e.key === "Escape") closePop(); };
+document.addEventListener("mousedown", e => { if (popFor && !$("pop").contains(e.target) && !e.target.closest(".tok")) closePop(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closePop(); });
+
+function renderChips(box, d, edits, valueOf, colourOf, tipOf, onChange) {
+  box.textContent = "";
+  d.tokens.forEach((t, i) => {
+    const s = document.createElement("span"), e = edits.get(i);
+    s.className = "tok" + (d.named.includes(i) ? " named" : "") + (e === "" ? " gone" : "") + (e ? " swapped" : "");
+    if (e) { const w = document.createElement("span"); w.className = "was"; w.textContent = t; s.append(w, e); }
+    else s.textContent = t;
+    s.tabIndex = 0;
+    const v = valueOf(i);
+    s.style.background = colourOf(v);
+    s.dataset.tip = tipOf(v);
+    const open = () => { $("tip").classList.add("hidden"); openPop(s, t, edits, i, onChange); };
+    s.onclick = open;
+    s.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } };
+    s.onmousemove = ev => { const tip = $("tip"); tip.textContent = s.dataset.tip; tip.classList.remove("hidden");
+      tip.style.left = ev.clientX + 12 + "px"; tip.style.top = ev.clientY + 14 + "px"; };
+    s.onmouseleave = () => $("tip").classList.add("hidden");
+    box.appendChild(s);
+  });
+}
+
+// Word-level diff of two texts: removed words in <del>, new words in <ins>.
+function lcsTable(x, y) {
+  const L = Array.from({ length: x.length + 1 }, () => new Int32Array(y.length + 1));
+  for (let i = x.length - 1; i >= 0; i--) for (let j = y.length - 1; j >= 0; j--)
+    L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  return L;
+}
+function diffInto(box, a, b) {
+  box.textContent = "";
+  const x = a.split(/(\s+)/), y = b.split(/(\s+)/), n = x.length, m = y.length, L = lcsTable(x, y);
+  const add = (tag, t) => { const e = tag ? document.createElement(tag) : document.createTextNode(t); if (tag) e.textContent = t; box.appendChild(e); };
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (x[i] === y[j]) { add(null, x[i]); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]) { if (x[i].trim()) add("del", x[i]); i++; }
+    else { add(y[j].trim() ? "ins" : null, y[j]); j++; }
+  }
+  while (i < n) { if (x[i].trim()) add("del", x[i]); i++; }
+  while (j < m) { add(y[j].trim() ? "ins" : null, y[j]); j++; }
+}
+// Share of words two texts have in common, in order (same measure as the server).
+function wordSim(a, b) {
+  const x = a.split(/\s+/).filter(Boolean), y = b.split(/\s+/).filter(Boolean);
+  if (!x.length && !y.length) return 1;
+  return 2 * lcsTable(x, y)[0][0] / (x.length + y.length);
+}
+
+function msg(box, who, cls, text, collapsed) {
+  const w = document.createElement("div"); w.className = "who"; w.textContent = who;
+  const m = document.createElement("div"); m.className = "msg " + cls; m.textContent = text;
+  if (collapsed) {
+    const d = document.createElement("details"), s = document.createElement("summary");
+    s.textContent = "show the question"; d.append(s, m); box.append(w, d);
+  } else box.append(w, m);
+}
+function namedChips(box, words, missing, missingNote) {
+  words.forEach(w => {
+    const s = document.createElement("span");
+    s.className = "w" + (missing.includes(w) ? " missing" : ""); s.textContent = w;
+    if (missing.includes(w)) s.title = missingNote;
+    box.appendChild(s);
+  });
+}
+
+// Light markdown for model replies: headings, bold, lists. Escapes HTML first.
+function mdInto(box, text) {
+  const esc = t => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+  let html = "", list = null, para = [];
+  const flushP = () => { if (para.length) { html += `<p>${para.map(inline).join("<br>")}</p>`; para = []; } };
+  const flushL = () => { if (list) { html += `</${list}>`; list = null; } };
+  for (const line of (text || "(empty)").split("\n")) {
+    let m;
+    if (!line.trim()) { flushP(); flushL(); }
+    else if (/^\s*(---+|\*\*\*+)\s*$/.test(line)) { flushP(); flushL(); }
+    else if ((m = line.match(/^\s*#{1,6}\s*(.*)$/))) { flushP(); flushL(); html += `<span class="h">${inline(m[1].replace(/\*\*/g, ""))}</span>`; }
+    else if ((m = line.match(/^\s*(?:[-*•]|(\d+)[.)])\s+(.*)$/))) {
+      flushP(); const kind = m[1] ? "ol" : "ul";
+      if (list !== kind) { flushL(); html += `<${kind}>`; list = kind; }
+      html += `<li>${inline(m[2])}</li>`;
+    } else { flushL(); para.push(line); }
+  }
+  flushP(); flushL();
+  box.classList.add("md"); box.innerHTML = html;
+}
+
+const STOP = new Set(("a an the and or but if then so to of in on at by for with from as is are was were be been being it its this that these those " +
+  "i you he she we they me him her us them my your his our their mine yours hers ours theirs what which who whom whose when where why how " +
+  "can could would should will shall may might must do does did done have has had having not no yes just also very more most some any all each " +
+  "about into over than too only own same such there here up down out off again further once both few other nor e g etc s t ll re ve d m " +
+  "i'm i'd i've you're you'll it's that's don't can't").split(" "));
+function contentWords(text, skip) {
+  return (text.toLowerCase().match(/[a-z][a-z'-]*/g) || [])
+    .map(w => w.replace(/'s$/, "").replace(/^'+|'+$/g, ""))
+    .filter(w => w.length > 2 && !STOP.has(w) && !skip.has(w));
+}
+// Words changed by the edit itself (e.g. son/daughter) are left out of the comparisons.
+function editWords() {
+  const skip = new Set();
+  for (const [i, w] of tedits) { skip.add(tdata.tokens[i].toLowerCase()); if (w) skip.add(w.toLowerCase().replace(/'s$/, "")); }
+  return skip;
+}
+function kwChips(box, words, cls) {
+  if (!words.length) { box.insertAdjacentHTML("beforeend", '<span class="note">none</span>'); return; }
+  words.forEach(w => { const s = document.createElement("span"); s.className = "kw " + cls; s.textContent = w; box.appendChild(s); });
+}
+function onlyIn(a, b, skip) {
+  const A = contentWords(a, skip), B = new Set(contentWords(b, skip)), seen = new Set();
+  return A.filter(w => !B.has(w) && !seen.has(w) && seen.add(w)).slice(0, 14);
+}
+
+// ---------- Average effect over paired samples ----------
+const T95 = { 1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36, 8: 2.31, 9: 2.26, 15: 2.13, 23: 2.07, 31: 2.04, 63: 2.00, 127: 1.98 };
+function pairedEffect(a, b) {
+  const d = a.map((x, i) => b[i] - x), n = d.length, mean = avg(d);
+  const sd = n > 1 ? Math.sqrt(d.reduce((s, x) => s + (x - mean) ** 2, 0) / (n - 1)) : 0;
+  const half = n > 1 ? (T95[n - 1] || 2) * sd / Math.sqrt(n) : Infinity;
+  return { mean, lo: mean - half, hi: mean + half, clear: n > 1 && (mean - half > 0 || mean + half < 0) };
+}
+// Dots for each sample: pink = your request, teal = with your edits; lines = averages.
+function strip(a, b) {
+  const all = [...a, ...b], lo = Math.min(...all), hi = Math.max(...all), w = 170, pad = 6;
+  const x = v => hi === lo ? w / 2 : pad + (v - lo) / (hi - lo) * (w - 2 * pad);
+  const dots = (vs, y, c) => vs.map(v => `<circle cx="${x(v).toFixed(1)}" cy="${y}" r="4" fill="${c}" fill-opacity=".75"/>`).join("");
+  const mean = (vs, y, c) => `<line x1="${x(avg(vs)).toFixed(1)}" x2="${x(avg(vs)).toFixed(1)}" y1="${y - 7}" y2="${y + 7}" stroke="${c}" stroke-width="2.5"/>`;
+  return `<svg width="${w}" height="34" role="img" aria-label="Each sample's value">${dots(a, 9, "#F28AB2")}${dots(b, 25, "#14B8A6")}${mean(a, 9, "#B83D6E")}${mean(b, 25, "#0F766E")}</svg>`;
+}
+const words = t => (t.match(/\S+/g) || []).length;
+function effectTable(base, r) {
+  const box = $("teffect"); box.textContent = "";
+  if (!r) return;
+  const n = base.samples.length, sign = v => {
+    const r = Math.abs(v).toFixed(Math.abs(v) < 10 ? 1 : 0);
+    return (+r === 0 ? "" : v > 0 ? "+" : "−") + r;
+  };
+  const rows = [
+    ["Tone (chance it's positive, %)", base.tone.map(t => t.positive * 100), r.tone.map(t => t.positive * 100)],
+    ["Length (words)", base.samples.map(words), r.samples.map(words)],
+    ["Same words as the reference (%)", base.similarity.map(v => v * 100), r.similarity.map(v => v * 100)],
+  ];
+  const h = document.createElement("div"); h.className = "who";
+  h.textContent = `Average effect of your edits over the ${n} pairs of samples (each pair shares the same random draws) `;
+  h.insertAdjacentHTML("beforeend", '<button class="info" data-info="effect" aria-label="What does this show?" aria-expanded="false">?</button>');
+  const t = document.createElement("table"); t.className = "eff";
+  t.innerHTML = "<tr><th>Measure</th><th>Your request</th><th>With your edits</th><th>Average change (95% range)</th><th class=\"strip\">Each sample</th><th></th></tr>";
+  rows.forEach(([name, a, b]) => {
+    const e = pairedEffect(a, b), tr = document.createElement("tr");
+    const cells = [name, avg(a).toFixed(0), avg(b).toFixed(0), `${sign(e.mean)}  (${sign(e.lo)} to ${sign(e.hi)})`];
+    cells.forEach(c => { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); });
+    const st = document.createElement("td"); st.className = "strip"; st.innerHTML = strip(a, b); tr.appendChild(st);
+    const v = document.createElement("td"); v.className = e.clear ? "yes" : "no"; v.textContent = e.clear ? "real change" : "could be chance"; tr.appendChild(v);
+    t.appendChild(tr);
+  });
+  box.append(h, t);
+  box.insertAdjacentHTML("beforeend", '<p class="note">"Real change" means the whole 95% range is on one side of zero, so the edit, not randomness, most likely caused it. With few samples the range is wide; use 16 or more samples for a fairer test. Tone is judged by the same model, so treat it as a rough guide.</p>');
+}
+
+// ---------- Where the edit pushes the reply ----------
+const showTok = t => JSON.stringify(t.replace(/\n/g, "↵"));
+let pushSeq = 0;
+async function tpush() {
+  const card = $("tpush-card"), id = ++pushSeq;
+  if (!tdata || tedits.size === 0) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  $("pushmap").textContent = "Comparing the model's word choices…"; $("pushtop").textContent = ""; $("peredit").textContent = "";
+  const r = await postJSON("/api/task/push", { text: tdata.prompt, edits: tEditsBody(), reply: tdata.reply });
+  if (id !== pushSeq) return;
+  const box = $("pushmap"); box.textContent = "";
+  const firstSplit = r.tokens.findIndex(t => t.alt[0] && t.alt[0][0] !== t.t);
+  r.tokens.forEach((t, i) => {
+    const s = document.createElement("span"); s.textContent = t.t;
+    const a = Math.min(t.js / 0.5, 1), towards = t.pb >= t.pa;
+    if (t.js > 0.01) s.style.background = `rgba(${towards ? "20,184,166" : "242,138,178"},${(0.1 + a * 0.8).toFixed(2)})`;
+    if (i === firstSplit) s.classList.add("first");
+    const alts = t.alt.map(([w, q]) => `${showTok(w)} ${pc(q)}`).join(", ");
+    s.dataset.tip = `${showTok(t.t)}: ${pc(t.pa)} → ${pc(t.pb)} likely. With your edit the model's top picks here: ${alts}.` +
+      (i === firstSplit ? " ← The first point where the edited request would write something different." : "");
+    s.onmousemove = e => { const tip = $("tip"); tip.textContent = s.dataset.tip; tip.classList.remove("hidden");
+      tip.style.left = e.clientX + 12 + "px"; tip.style.top = e.clientY + 14 + "px"; };
+    s.onmouseleave = () => $("tip").classList.add("hidden");
+    box.appendChild(s);
+  });
+
+  const t = $("pushtop");
+  t.innerHTML = "<tr><th>Original word</th><th>How likely</th><th>The edited request would rather write</th></tr>";
+  r.tokens.map((x, i) => [x, i]).filter(([x]) => x.t.trim()).sort((p, q) => q[0].js - p[0].js).slice(0, 6).forEach(([x]) => {
+    const tr = document.createElement("tr"), w = document.createElement("td"), l = document.createElement("td"), alt = document.createElement("td");
+    const sp = document.createElement("span"); sp.className = "alt"; sp.textContent = x.t.trim(); w.appendChild(sp);
+    l.textContent = `${pc(x.pa)} → ${pc(x.pb)}`;
+    x.alt.forEach(([word, q]) => { const s = document.createElement("span"); s.className = "alt"; s.textContent = word.replace(/\n/g, "↵"); alt.append(s, ` ${pc(q)}  `); });
+    tr.append(w, l, alt); t.appendChild(tr);
+  });
+
+  if (r.per_edit.length) {
+    const pe = $("peredit");
+    pe.insertAdjacentHTML("beforeend", '<div class="who">Each edit on its own: how far it pushes away from the original reply <button class="info" data-info="peredit" aria-label="What does this show?" aria-expanded="false">?</button></div>');
+    const tb = document.createElement("table"); tb.className = "kwt";
+    tb.innerHTML = "<tr><th>Edit</th><th>Push (drop in log-probability per word)</th></tr>";
+    const mx = Math.max(...r.per_edit.map(e => Math.abs(e.drop)), 1e-6);
+    r.per_edit.sort((a, b) => b.drop - a.drop).forEach(e => {
+      const tr = document.createElement("tr"), a = document.createElement("td"), b = document.createElement("td");
+      a.textContent = `${e.from} → ${e.to || "(deleted)"}`;
+      b.innerHTML = `<span class="bar" style="width:${Math.max(2, Math.abs(e.drop) / mx * 120)}px;background:${e.drop >= 0 ? "var(--pink)" : "var(--teal)"}"></span>`;
+      b.append(e.drop.toFixed(3));
+      tr.append(a, b); tb.appendChild(tr);
+    });
+    pe.appendChild(tb);
+  }
+}
+
+// ---------- Word clouds ----------
+// Packed word cloud: words placed along a spiral from the centre, biggest first,
+// with no overlaps. `scale` is shared by the two clouds in a pair so sizes compare.
+const measureCtx = document.createElement("canvas").getContext("2d");
+function layoutCloud(items, scale, aspect = 1.5) {
+  const ax = 3.3 * Math.sqrt(aspect), ay = 3.3 / Math.sqrt(aspect);  // spiral stretched to the box's shape
+  const top = items.filter(([, v]) => Math.abs(v) > 1e-6).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 45);
+  const placed = [];
+  if (!top.length) return null;
+  const mx = scale || Math.abs(top[0][1]);
+  const hit = r => placed.some(q => r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y);
+  top.forEach(([w, v, marked], rank) => {
+    const rel = Math.min(Math.abs(v) / mx, 1), size = 11 + 45 * rel;  // linear: twice the importance looks twice the size
+    measureCtx.font = `700 ${size}px Inter, system-ui, sans-serif`;
+    const tw = measureCtx.measureText(w).width + 6, th = size * 0.95 + 4;
+    const vertical = rank > 5 && rank % 4 === 1 && w.length > 2;
+    const W = vertical ? th : tw, H = vertical ? tw : th;
+    for (let t = 0; t < 600; t += 0.12) {
+      const r = { x: ax * t * Math.cos(t) - W / 2, y: ay * t * Math.sin(t) - H / 2, w: W, h: H };
+      if (!hit(r)) { placed.push({ ...r, w0: w, v, size, vertical, marked, rel }); break; }
+    }
+  });
+  const minX = Math.min(...placed.map(r => r.x)), maxX = Math.max(...placed.map(r => r.x + r.w));
+  const minY = Math.min(...placed.map(r => r.y)), maxY = Math.max(...placed.map(r => r.y + r.h));
+  return { placed, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, w: maxX - minX + 20, h: maxY - minY + 20 };
+}
+// Zoom that fits a layout in its box; a pair uses the smaller of the two so sizes stay comparable.
+function fitZoom(box, L) { return L ? Math.min(box.clientWidth / L.w, box.clientHeight / L.h, 2.5) : Infinity; }
+function renderCloud(box, L, kind, tipOf, zoom) {
+  box.textContent = "";
+  if (!L) { box.innerHTML = '<div class="empty note">nothing stands out</div>'; return; }
+  const NS = "http://www.w3.org/2000/svg", vw = box.clientWidth / zoom, vh = box.clientHeight / zoom;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `${L.cx - vw / 2} ${L.cy - vh / 2} ${vw} ${vh}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Word cloud: " + L.placed.map(r => r.w0).join(", "));
+  L.placed.forEach(r => {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    if (r.marked) {
+      const m = document.createElementNS(NS, "rect");
+      Object.entries({ x: r.x - 2, y: r.y - 2, width: r.w + 4, height: r.h + 4, rx: 6, class: "mark" }).forEach(([k, val]) => m.setAttribute(k, val));
+      svg.appendChild(m);
+    }
+    const t = document.createElementNS(NS, "text");
+    const shade = 1 + Math.min(3, Math.floor(r.rel * 4));
+    t.setAttribute("class", (kind === "neg" || (kind === "imp" && r.v < 0) ? "n" : "c") + shade);
+    t.setAttribute("x", cx); t.setAttribute("y", cy);
+    t.setAttribute("text-anchor", "middle"); t.setAttribute("dominant-baseline", "central");
+    t.setAttribute("font-size", r.size.toFixed(1));
+    if (r.vertical) t.setAttribute("transform", `rotate(-90 ${cx} ${cy})`);
+    t.dataset.w = r.w0.toLowerCase();
+    t.textContent = r.w0;
+    const title = document.createElementNS(NS, "title"); title.textContent = tipOf(r.w0, r.v); t.appendChild(title);
+    t.onmouseenter = () => { const g = box.closest(".clouds"); g.classList.add("hovering");
+      g.querySelectorAll("text").forEach(x => x.classList.toggle("hit", x.dataset.w === t.dataset.w)); };
+    t.onmouseleave = () => box.closest(".clouds").classList.remove("hovering");
+    svg.appendChild(t);
+  });
+  box.appendChild(svg);
+}
+function cloudPair([b0, b1], [i0, i1], [k0, k1], [tip0, tip1]) {
+  const sc = peak(i0, i1), asp = b0.clientWidth / b0.clientHeight || 1.5;
+  const L0 = layoutCloud(i0, sc, asp), L1 = layoutCloud(i1, sc, asp);
+  const z = Math.min(fitZoom(b0, L0), fitZoom(b1, L1));
+  renderCloud(b0, L0, k0, tip0, isFinite(z) ? z : 1);
+  renderCloud(b1, L1, k1, tip1, isFinite(z) ? z : 1);
+}
+
+// Dumbbell rows: one per word, pink dot = original, teal dot = edited, on one shared axis.
+function dumbbell(box, rows, fmt, legend, fixed) {
+  box.textContent = "";
+  if (!rows.length) { box.innerHTML = '<p class="note">No clear changes.</p>'; return; }
+  const all = rows.flatMap(r => [r[1], r[2]]), [lo, hi] = fixed || [Math.min(0, ...all), Math.max(0, ...all)], span = hi - lo || 1;
+  const x = v => ((v - lo) / span * 100).toFixed(2) + "%";
+  box.insertAdjacentHTML("beforeend", `<div class="legend2">${legend}</div><div class="hd">Word</div><div class="hd"></div><div class="hd" style="text-align:right">Change</div>`);
+  rows.forEach(([w, a, b]) => {
+    const name = document.createElement("div"); name.className = "w"; name.textContent = w;
+    const tr = document.createElement("div"); tr.className = "track";
+    tr.title = `${w}: ${fmt(a)} → ${fmt(b)}`;
+    tr.innerHTML = `<div class="axis"></div>${lo < 0 ? `<div class="zero" style="left:${x(0)}"></div>` : ""}` +
+      `<div class="seg" style="left:${x(Math.min(a, b))};width:calc(${x(Math.max(a, b))} - ${x(Math.min(a, b))})"></div>` +
+      `<div class="dot a" style="left:${x(a)}"></div><div class="dot b" style="left:${x(b)}"></div>`;
+    const d = document.createElement("div"); const ch = b - a;
+    d.className = "d " + (ch > 0 ? "up" : ch < 0 ? "down" : ""); d.textContent = (ch > 0 ? "+" : ch < 0 ? "−" : "") + fmt(Math.abs(ch));
+    box.append(name, tr, d);
+  });
+}
+const peak = (...lists) => Math.max(1e-6, ...lists.flat().map(([, v]) => Math.abs(v)));
+function requestItems(tokens, imp, marked) {
+  const best = new Map();
+  tokens.forEach((t, i) => {
+    if (!/[\w]/.test(t)) return;
+    const w = t.toLowerCase(), v = imp[i] ?? 0, m = marked(i, w);
+    const prev = best.get(w);
+    if (!prev || Math.abs(v) > Math.abs(prev[1])) best.set(w, [t, v, m || (prev && prev[2])]);
+  });
+  return [...best.values()];
+}
+function renderClouds() {
+  const card = $("tcloud-card");
+  if (!tdata || !lastRun || !lastRun.importance) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const newWords = new Set([...tedits.values()].filter(Boolean).map(w => w.toLowerCase()));
+  const tip = (w, v) => `${w}: deleting it alone ${v >= 0 ? "lowers" : "raises"} the reply's likelihood by ${Math.abs(v).toFixed(3)}`;
+  const r0 = requestItems(tdata.tokens, tdata.importance, i => tedits.has(i));
+  const r1 = requestItems(lastRun.tokens, lastRun.importance, (i, w) => newWords.has(w));
+  cloudPair([$("cloud-req0"), $("cloud-req1")], [r0, r1], ["imp", "imp"], [tip, tip]);
+
+  // Pair the edited word with its replacement (son → daughter) so it gets one row.
+  const swapped = new Map([...tedits].filter(([, w]) => w).map(([i, w]) => [w.toLowerCase(), tdata.tokens[i].toLowerCase()]));
+  const label = new Map([...tedits].filter(([, w]) => w).map(([i, w]) => [tdata.tokens[i].toLowerCase(), `${tdata.tokens[i]} → ${w}`]));
+  const left = new Map(r0.map(([w, v]) => [w.toLowerCase(), v]));
+  const right = new Map(r1.map(([w, v]) => [swapped.get(w.toLowerCase()) || w.toLowerCase(), v]));
+  const reqRows = [...new Set([...left.keys(), ...right.keys()])]
+    .map(k => [label.get(k) || k, left.get(k) || 0, right.get(k) || 0])
+    .sort((a, b) => Math.abs(b[2] - b[1]) - Math.abs(a[2] - a[1])).slice(0, 10);
+  dumbbell($("dumb-req"), reqRows, v => v.toFixed(3),
+    '<span style="color:#F28AB2">●</span> your request &nbsp; <span style="color:#14B8A6">●</span> with your edits &nbsp;·&nbsp; further right = more important for its reply');
+
+  // Reply words: across the samples when temperature is on, else the two replies.
+  const skip = editWords();
+  const counts = texts => { const c = new Map(); texts.forEach(t => new Set(contentWords(t, skip)).forEach(w => c.set(w, (c.get(w) || 0) + 1))); return c; };
+  const sampled = base && lastSample;
+  const a = counts(sampled ? base.samples : [tdata.reply]), b = counts(sampled ? lastSample.samples : [lastRun.reply]);
+  const n = sampled ? base.samples.length : 1, keys = [...new Set([...a.keys(), ...b.keys()])];
+  const diff = w => (a.get(w) || 0) - (b.get(w) || 0);
+  $("cloud-reply-note").textContent = sampled
+    ? `Bigger = the word appears in more of the ${n} samples on this side than on the other.`
+    : "Bigger = the word is used in this reply but not the other. Turn temperature up for a fairer picture across several samples.";
+  const tipR = side => (w, v) => sampled ? `${w}: ${a.get(w) || 0} of ${n} samples → ${b.get(w) || 0} of ${n}` : `${w}: only in the ${side} reply`;
+  const w0 = keys.filter(w => diff(w) > 0).map(w => [w, diff(w)]), w1 = keys.filter(w => diff(w) < 0).map(w => [w, -diff(w)]);
+  cloudPair([$("cloud-rep0"), $("cloud-rep1")], [w0, w1], ["neg", "pos"], [tipR("original"), tipR("edited")]);
+  const repRows = keys.map(w => [w, (a.get(w) || 0) / n * 100, (b.get(w) || 0) / n * 100])
+    .sort((p, q) => Math.abs(q[2] - q[1]) - Math.abs(p[2] - p[1])).slice(0, 12);
+  dumbbell($("dumb-rep"), repRows, v => v.toFixed(0) + "%",
+    sampled ? `<span style="color:#F28AB2">●</span> your request &nbsp; <span style="color:#14B8A6">●</span> with your edits &nbsp;·&nbsp; % of the ${n} samples that use the word`
+            : `<span style="color:#F28AB2">●</span> original reply &nbsp; <span style="color:#14B8A6">●</span> edited reply &nbsp;·&nbsp; 100% = the reply uses the word`, [0, 100]);
+}
+
+// ---------- Explanations behind every "?" ----------
+const INFO = {
+  "s-answer": ["The model's answer and how sure it is",
+    "Whether the model calls the review positive or negative, and how confident it is.",
+    "We ask for a one-word answer and read the model's probabilities for \"positive\" and \"negative\" directly, instead of reading what it writes. Log-odds is the same confidence on a scale with no ceiling: 0 = 50/50, ±2 ≈ 88%, ±5 ≈ 99.3%, ±10 ≈ 99.995%.",
+    "The bar runs from sure negative to sure positive. Grey marks the original review, black marks your edited one. The model is often over 99% sure, so watch log-odds: it still moves when the percentage is stuck near 100%."],
+  "s-chat": ["The exact conversation",
+    "The questions sent to the model, word for word, and its replies.",
+    "Question 1 gives the answer and probabilities. Question 2 asks for the answer plus the 3 words that most influenced it.",
+    "If the label in Question 2 doesn't match Question 1, the model contradicts itself."],
+  "s-named": ["The model's own explanation",
+    "The 3 words the model says most influenced its answer.",
+    "Taken from its reply to Question 2. Words it named that aren't in the review are struck through: the model made them up.",
+    "This is the explanation we are testing. Compare it with \"what actually matters\" below."],
+  "s-importance": ["What actually matters (deletion test)",
+    "How much each word really affects the answer.",
+    "Each word is deleted on its own and the review is scored again. The colour is how far the answer moved, in log-odds. Teal words were pushing towards positive, pink towards negative.",
+    "Strong colours matter most. If the ◆ words the model named are pale while other words are strong, its explanation wasn't faithful. \"Delete the model's words\" vs \"Delete the truly top words\" shows the gap in one click."],
+  "temp": ["Temperature and samples",
+    "How much randomness the model uses when it writes.",
+    "At 0 the model always picks its single most likely next word, so the same request always gives the same reply. Above 0 it picks at random in proportion to its probabilities: higher = more adventurous. Samples = how many random replies to write for each request.",
+    "Use 0 to see the pure effect of an edit. Use about 0.7 with 16+ samples to check that effect is bigger than the model's normal randomness. Above about 1.2 replies get strange."],
+  "replies": ["The two replies",
+    "The model's reply to your original request (left) and to the edited request (right).",
+    "Both are written at temperature 0, so each is the model's single most likely reply. Any difference between them comes from your edit, not from chance.",
+    "\"Side by side\" shows them cleanly. \"Highlight changes\" marks every removed (pink) and added (teal) word, which is best when the replies differ only a little."],
+  "shared": ["Words shared, in order",
+    "How much of the wording the two replies have in common.",
+    "We find the longest run of words that appear in both replies in the same order, and compare it with their total length.",
+    "100% = identical, about 50% = half the wording reused, under 20% = essentially different replies. Rewording with the same meaning still scores low, so check the replies themselves."],
+  "length": ["Length",
+    "How many words each reply has.",
+    "A simple word count.",
+    "A big change can mean the model is more or less helpful, more cautious, or asking questions instead of answering."],
+  "lean": ["How strongly it still leans to the original reply",
+    "How willing the model still is to write the original reply, word for word, after the edited request.",
+    "We feed the original reply in after each request and average the probability the model gives each of its words.",
+    "88% → 69% means that after the edit, the model is noticeably less inclined to say the original thing. This picks up a shift even when the visible reply comes out the same."],
+  "tone": ["Tone",
+    "How positive the reply sounds.",
+    "The same model is asked whether the reply's tone is positive or negative, and we read its probability for \"positive\", as in the sentiment test.",
+    "Compare the two numbers: a drop means the edited request got a less upbeat reply. The model is judging its own text, so treat it as a rough guide."],
+  "only": ["Words only in one reply",
+    "The content words each reply uses that the other doesn't.",
+    "Common words (the, and, is…) and the words you edited are left out.",
+    "A quick summary of what each reply talks about, e.g. interests, hobbies vs nurse, healthcare."],
+  "push": ["Where your edit pushes the reply",
+    "At each point in the original reply, whether the edit changes what the model wants to write next, and towards what.",
+    "We feed the original reply in after both requests and compare the model's full set of next-word probabilities at every word (Jensen–Shannon divergence: 0 = identical predictions, 1 = completely different).",
+    "Pink = the edit pushes the model away from that word, teal = towards it, stronger = bigger push. The outlined word is the first split: where the edited request would start writing something different. Hover any word for what it would rather write."],
+  "pushtop": ["Biggest pushes",
+    "The words of the original reply the edit affected most.",
+    "Ranked by the push score above. \"How likely\" is the model's probability of writing that word after the original request → after the edited one.",
+    "The right column shows what the edited request would rather write there: that's the direction the edit pushes."],
+  "peredit": ["Each edit on its own",
+    "When you made several edits, how much each one moves the model by itself.",
+    "Each edit is applied alone and we measure how much less likely the original reply becomes (drop in log-probability per word).",
+    "The longest bar is the edit that drives the change. Short bars barely matter."],
+  "cloudreq": ["Which words of the request drove each reply",
+    "How much each word of the request mattered for the reply it produced.",
+    "Each word is deleted on its own and we measure how much less likely the model becomes to write the same reply. Done separately for the original and the edited request.",
+    "Bigger = more important. Teal = the reply needs it, pink = the reply is more likely without it. If different words are big on each side, the edit changed what the model focuses on."],
+  "cloudrep": ["Which words each reply uses more",
+    "The content words that set each reply apart.",
+    "With temperature on, we count in how many samples each word appears on each side. At temperature 0 we compare the two single replies.",
+    "Bigger = used more on that side than the other. Sampling gives a fairer picture than a single reply."],
+  "sampling": ["Randomness vs your edits",
+    "Whether your edit changes the replies more than the model's normal randomness does.",
+    "We write several random replies to the original request and to the edited one. Sample 1 of each uses the same random draws, sample 2 too, and so on, so within a pair the only difference is your edit.",
+    "Read the verdict line and the average-effect table. A difference that also shows up across samples is real. One that doesn't could just be luck."],
+  "match": ["Match with the reference reply",
+    "How close each random reply is to the reference reply (the temperature-0 one at the top).",
+    "The same \"words shared, in order\" measure, averaged over the samples.",
+    "Compare the two sides: if edited samples match much less than the original samples do, the edit moved the model. At high temperature both sides score low, so lean on the word table instead."],
+  "effect": ["Average effect",
+    "How much the edit changes tone, length and wording on average across the paired samples, and whether that could be chance.",
+    "For each pair we take edited minus original, then average. The 95% range is where the true average change most likely lies, given how much the pairs vary.",
+    "\"Real change\" = the whole range is on one side of zero. \"Could be chance\" = zero is inside the range. Dots show each sample: pink original, teal edited; lines show averages. More samples give a narrower range."],
+  "kw": ["Word table",
+    "Words that turn up in many more samples on one side than the other.",
+    "For each content word, we count in how many samples it appears, per side. Only big differences are shown.",
+    "E.g. \"nurse: 0 of 8 → 7 of 8\" means the edited request makes the model suggest nursing almost every time. This is the standard way to measure bias in what a model talks about."],
+  "t-named": ["The model's own explanation",
+    "After replying, the model is asked which 3 words of your request most influenced its reply.",
+    "Taken from its answer to the follow-up question. Words that aren't in your request are struck through.",
+    "This is the explanation we test. Compare it with \"what actually matters\" below: the ◆ words should be the strongest colours if the explanation is faithful."],
+  "t-importance": ["What actually matters (deletion test)",
+    "How much each word of your request really shaped the reply.",
+    "Each word is deleted on its own, and we measure how much less likely the model becomes to write its original reply.",
+    "Teal = the reply needs it, pink = the reply is more likely without it, pale = barely matters. Click a word to delete or change it and see the new reply."],
+};
+
+document.addEventListener("click", e => {
+  const b = e.target.closest(".info");
+  if (!b) return;
+  e.preventDefault();
+  const host = b.closest(".stats") || b.closest("h2, .who, .note, .knobs") || b.parentElement;
+  const open = b.getAttribute("aria-expanded") === "true";
+  document.querySelectorAll(`.explain[data-for="${b.dataset.info}"]`).forEach(x => x.remove());
+  document.querySelectorAll(`.info[data-info="${b.dataset.info}"]`).forEach(x => x.setAttribute("aria-expanded", "false"));
+  if (open) return;
+  const [title, what, how, read] = INFO[b.dataset.info];
+  const box = document.createElement("div"); box.className = "explain"; box.dataset.for = b.dataset.info;
+  box.innerHTML = "<h4></h4><dl><dt>What it shows</dt><dd></dd><dt>How it's worked out</dt><dd></dd><dt>How to read it</dt><dd></dd></dl>";
+  box.querySelector("h4").textContent = title;
+  box.querySelectorAll("dd").forEach((d, i) => d.textContent = [what, how, read][i]);
+  host.insertAdjacentElement("afterend", box);
+  b.setAttribute("aria-expanded", "true");
+});
+
+// ---------- Mode switch ----------
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  for (const m of ["sentiment", "task"]) {
+    $("mode-" + m).classList.toggle("hidden", m !== b.dataset.mode);
+    $("sub-" + m).classList.toggle("hidden", m !== b.dataset.mode);
+    $("guide-" + m).classList.toggle("hidden", m !== b.dataset.mode);
+  }
+  closePop();
+});
+
+// ---------- Sentiment test ----------
+let data = null, edits = new Map(), seq = 0;
+function label(p) { return p.positive >= 0.5 ? "positive" : "negative"; }
+
+function showVerdict(el, nums, marker, p) {
+  const l = label(p);
+  el.textContent = l.toUpperCase();
+  el.className = "answer " + (l === "positive" ? "pos" : "neg");
+  nums.textContent = `P(${l}) ${(Math.max(p.positive, p.negative) * 100).toFixed(1)}% · log-odds ${p.logodds >= 0 ? "+" : ""}${p.logodds.toFixed(2)}`;
+  const x = Math.max(-LO_RANGE, Math.min(LO_RANGE, p.logodds));
+  marker.style.left = `${(x + LO_RANGE) / (2 * LO_RANGE) * 100}%`;
+}
+function colour(push) {
+  if (Math.abs(push) < 0.05) return "var(--chip)";
+  const a = Math.min(Math.abs(push) / 3, 1);
+  return `rgba(${push > 0 ? "20,184,166" : "242,138,178"},${(0.08 + a * 0.82).toFixed(2)})`;
+}
+const editedText = () => edited(data.tokens, edits).join(" ");
+
+async function rescore() {
+  const id = ++seq;
+  if (edits.size === 0) { $("m0").classList.add("same"); showVerdict($("a1"), $("n1"), $("m1"), data.base); $("compare").textContent = ""; renderChat(); return; }
+  $("n1").textContent = "scoring…";
+  const p = await post("/api/score", editedText());
+  if (id !== seq) return;
+  showVerdict($("a1"), $("n1"), $("m1"), p);
+  renderChat(p);
+  const orig = label(data.base), sign = orig === "positive" ? 1 : -1;
+  const drop = sign * (data.base.logodds - p.logodds), flipped = label(p) !== orig;
+  if (flipped) $("a1").insertAdjacentHTML("beforeend", '<span class="flip">FLIPPED</span>');
+  $("m0").classList.toggle("same", Math.abs(p.logodds - data.base.logodds) < 0.8);
+  const d = Math.abs(drop) < 0.005 ? "0.00" : (drop > 0 ? "−" : "+") + Math.abs(drop).toFixed(2);
+  const what = describe(edits);
+  $("compare").textContent = `${what[0].toUpperCase() + what.slice(1)} changed confidence in "${orig}" by ${d} log-odds${flipped ? ", enough to flip the answer" : ""}.`;
+}
+
+function renderWords() {
+  renderChips($("words"), data, edits, i => data.push[i] ?? 0, colour,
+    v => `Deleting this alone: ${v >= 0 ? "−" : "+"}${Math.abs(v).toFixed(2)} log-odds ${v >= 0 ? "less positive" : "less negative"}`,
+    () => { renderWords(); rescore(); });
+}
+
+function renderChat(e) {
+  const box = $("chat"); box.textContent = "";
+  msg(box, "Question 1: label only (used for the probabilities)", "you", data.base.prompt, true);
+  msg(box, "Model's reply", "llm", data.base.reply || "(empty)");
+  msg(box, "Question 2: label and explain", "you", data.explain_prompt, true);
+  msg(box, "Model's reply", "llm", data.explain_reply || "(empty)");
+  if (e) {
+    msg(box, "Question 1 again, with your edits", "you", e.prompt, true);
+    msg(box, "Model's reply", "llm", e.reply || "(empty)");
+  }
+}
+
+function renderSaid() {
+  const box = $("said"); box.textContent = "";
+  const p = document.createElement("div"); p.className = "note";
+  const agree = data.stated === label(data.base);
+  p.textContent = data.stated
+    ? `In its explanation the model said "${data.stated}"${agree ? "" : `, but its direct answer is "${label(data.base)}"`}.`
+    : "The model's explanation could not be read.";
+  box.appendChild(p);
+  namedChips(box, data.words, data.missing, "Not in the review: the model made this up");
+  if (data.missing.length) box.insertAdjacentHTML("beforeend", '<div class="note">Struck-through words are not in the review.</div>');
+}
+
+async function analyse(text) {
+  $("go").disabled = true; $("status").textContent = "Asking the model and testing every word…"; closePop();
+  try {
+    data = await post("/api/analyze", text);
+    edits = new Map();
+    $("text").value = data.tokens.join(" ");
+    $("result").classList.remove("hidden"); $("chat-card").classList.remove("hidden"); $("words-card").classList.remove("hidden");
+    showVerdict($("a0"), $("n0"), $("m0"), data.base);
+    renderSaid(); renderWords(); rescore();
+    $("status").textContent = "";
+  } catch (e) {
+    $("status").textContent = "Something went wrong: " + e.message;
+  } finally { $("go").disabled = false; }
+}
+
+function contentIdx() { return data.tokens.map((_, i) => i).filter(i => !data.punct[i]); }
+function setGone(idx) { edits = new Map(idx.map(i => [i, ""])); closePop(); renderWords(); rescore(); }
+function topK() {
+  const sign = label(data.base) === "positive" ? 1 : -1;
+  return contentIdx().sort((a, b) => sign * (data.push[b] - data.push[a])).slice(0, Math.max(data.named.length, 1));
+}
+$("go").onclick = () => analyse($("text").value);
+document.querySelectorAll("[data-ex]").forEach(b => b.onclick = () => { $("text").value = b.dataset.ex; analyse(b.dataset.ex); });
+$("del-named").onclick = () => setGone(data.named);
+$("del-top").onclick = () => setGone(topK());
+$("del-rand").onclick = () => setGone(contentIdx().sort(() => Math.random() - 0.5).slice(0, Math.max(data.named.length, 1)));
+$("reset").onclick = () => setGone([]);
+$("reask").onclick = () => analyse(editedText());
+$("text").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyse($("text").value); });
+
+// ---------- Any task ----------
+let tdata = null, tedits = new Map(), tseq = 0;
+const tEditsBody = () => Object.fromEntries(tedits);
+
+function tcolour(v) {
+  if (Math.abs(v) < 0.01) return "var(--chip)";
+  const a = Math.min(Math.abs(v) / 0.5, 1);
+  return `rgba(${v > 0 ? "20,184,166" : "242,138,178"},${(0.08 + a * 0.82).toFixed(2)})`;
+}
+const pct = lp => (Math.exp(lp) * 100).toFixed(1) + "%";
+
+// Sampling. The same seed is used for the original and the edited request, so
+// sample i of each got the same random draws: a fair pair.
+const temp = () => parseFloat($("temp").value);
+let base = null, sseq = 0, seed = 0, lastSample = null;
+
+// Which words turn up in more samples of one group than the other.
+function keywordTable(a, b) {
+  const box = $("tkw"); box.textContent = "";
+  if (!b) return [];
+  const skip = editWords(), count = xs => { const c = new Map(); xs.forEach(t => new Set(contentWords(t, skip)).forEach(w => c.set(w, (c.get(w) || 0) + 1))); return c; };
+  const ca = count(a.samples), cb = count(b.samples), n = a.samples.length;
+  const rows = [...new Set([...ca.keys(), ...cb.keys()])]
+    .map(w => [w, ca.get(w) || 0, cb.get(w) || 0]).filter(([, x, y]) => Math.abs(x - y) >= Math.max(2, n / 4))
+    .sort((p, q) => Math.abs(q[2] - q[1]) - Math.abs(p[2] - p[1])).slice(0, 10);
+  const h = document.createElement("div"); h.className = "who";
+  h.textContent = `Words whose use differs most between the two groups (in how many of the ${n} samples each appears) `;
+  h.insertAdjacentHTML("beforeend", '<button class="info" data-info="kw" aria-label="What does this show?" aria-expanded="false">?</button>');
+  box.appendChild(h);
+  if (!rows.length) { box.insertAdjacentHTML("beforeend", '<p class="note">No word differs by much. The two groups talk about the same things.</p>'); return rows; }
+  const t = document.createElement("table"); t.className = "kwt";
+  t.innerHTML = "<tr><th>Word</th><th>Your request</th><th>With your edits</th></tr>";
+  rows.forEach(([w, x, y]) => {
+    const tr = document.createElement("tr");
+    const cell = (v, colour) => { const td = document.createElement("td");
+      td.innerHTML = `<span class="bar" style="width:${Math.max(2, v / n * 80)}px;background:${colour}"></span>`; td.append(`${v} of ${n}`); return td; };
+    const tw = document.createElement("td"); tw.textContent = w;
+    tr.append(tw, cell(x, "var(--pink)"), cell(y, "var(--teal)")); t.appendChild(tr);
+  });
+  box.appendChild(t);
+  return rows;
+}
+$("temp").oninput = () => {
+  const t = temp();
+  $("tempv").textContent = t === 0 ? "0 (always the same)" : t.toFixed(1);
+  $("nwrap").classList.toggle("hidden", t === 0);
+};
+$("temp").onchange = () => { if (tdata) { base = null; tsample(); } };
+$("nsamp").onchange = $("temp").onchange;
+
+function sampleBox(text, simRef, extra) {
+  const d = document.createElement("div"); d.className = "sample";
+  const m = document.createElement("div"); m.className = "msg llm";
+  if (extra && showDiff) diffInto(m, extra, text); else mdInto(m, text);
+  const s = document.createElement("span"); s.className = "sim"; s.textContent = pc(simRef) + " same";
+  s.title = "Share of words in common with the reference reply";
+  d.append(m, s); return d;
+}
+
+function renderPairs(edit) {
+  const box = $("pairs"); box.textContent = "";
+  lastSample = edit;
+  box.insertAdjacentHTML("beforeend", `<div class="head">Your request</div><div class="head">With your edits${showDiff ? " (changes vs the sample on the left)" : ""}</div>`);
+  base.samples.forEach((t, i) => {
+    const no = document.createElement("div"); no.className = "pairno";
+    no.textContent = `Sample ${i + 1}` + (edit ? ` · same random draws · ${pc(wordSim(t, edit.samples[i]))} of the words stayed the same` : "");
+    box.append(no, sampleBox(t, base.similarity[i]));
+    if (edit) box.append(sampleBox(edit.samples[i], edit.similarity[i], t));
+    else { const e = document.createElement("div"); e.className = "note"; e.textContent = tedits.size ? "…" : "Edit some words to see this sample change."; box.append(e); }
+  });
+}
+
+async function tsample() {
+  const card = $("tsample-card");
+  if (temp() === 0 || !tdata) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const id = ++sseq, body = { text: tdata.prompt, reply: tdata.reply, temperature: temp(), n: +$("nsamp").value };
+  $("tsample-note").textContent = `${+$("nsamp").value} random replies to each request at temperature ${temp().toFixed(1)}, compared in pairs that share the same random draws. ` +
+    `Does your edit change the replies more than randomness alone does?`;
+  if (+$("nsamp").value >= 64) $("tsample-note").textContent += ` This many samples takes a while (roughly ${+$("nsamp").value >= 128 ? "1–2 minutes" : "30–60 seconds"}).`;
+  if (!base) {
+    seed = Math.floor(Math.random() * 1e9);
+    $("sim0").textContent = "…"; $("pairs").textContent = "";
+    const r = await postJSON("/api/task/sample", { ...body, seed, edits: {} });
+    if (id !== sseq) return;
+    base = r; $("sim0").textContent = pc(avg(r.similarity));
+  }
+  keywordTable(null, null); effectTable(null, null);
+  if (tedits.size === 0) {
+    $("sim1").textContent = "–"; renderPairs(null);
+    $("tsample-verdict").textContent = "Edit some words to compare."; return;
+  }
+  $("sim1").textContent = "…"; renderPairs(null); lastSample = null;
+  const r = await postJSON("/api/task/sample", { ...body, seed, edits: tEditsBody() });
+  if (id !== sseq) return;
+  const a = avg(base.similarity), b = avg(r.similarity);
+  $("sim1").textContent = pc(b); renderPairs(r); renderClouds();
+  effectTable(base, r);
+  const n = base.samples.length;
+  const big = keywordTable(base, r).filter(([, x, y]) => Math.abs(x - y) >= n / 2).map(([w, x, y]) => `"${w}" (${x} → ${y} of ${n})`);
+  const lo = Math.min(...base.similarity);
+  const content = big.length ? ` But the content shifts clearly: ${big.slice(0, 3).join(", ")}.` : "";
+  $("tsample-verdict").textContent = (b < lo
+    ? `Your edits changed the reply more than randomness ever did: every edited sample is further from the reference than the least similar original sample (${pc(lo)}).`
+    : b < a - 0.1
+      ? `Your edits changed the reply somewhat more than normal randomness (${pc(a)} → ${pc(b)}), but the ranges overlap.`
+      : big.length
+        ? `The overall wording varies about as much as normal randomness (${pc(a)} vs ${pc(b)}).`
+        : `Your edits made no clear difference beyond normal randomness (${pc(a)} vs ${pc(b)}).`) + content;
+}
+
+let showDiff = false, lastRun = null;
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+  showDiff = b.dataset.view === "diff";
+  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("on", x === b));
+  renderReplies();
+  if (base) renderPairs(lastSample);
+});
+
+const toneText = t => t ? `tone ${pc(t.positive)} positive` : "";
+function renderReplies() {
+  mdInto($("treply0"), tdata.reply);
+  $("ttone0").textContent = toneText(tdata.tone);
+  $("ttone1").textContent = toneText(lastRun ? lastRun.tone : tdata.tone);
+  const box = $("treply1"), sum = $("tsummary");
+  if (!lastRun) { mdInto(box, tdata.reply); sum.classList.add("hidden"); return; }
+  const r = lastRun;
+  if (showDiff) { box.classList.remove("md"); diffInto(box, tdata.reply, r.reply); } else mdInto(box, r.reply);
+
+  const skip = editWords(), wc = t => (t.match(/\S+/g) || []).length;
+  sum.classList.remove("hidden"); sum.textContent = "";
+  sum.insertAdjacentHTML("beforeend", '<div class="stats"></div><div class="only"><div></div><div></div></div>');
+  const stats = sum.querySelector(".stats"), [ca, cb] = sum.querySelectorAll(".only > div");
+  const stat = (big, note, key) => { const d = document.createElement("div"); d.className = "stat";
+    d.innerHTML = '<div class="big"></div><p class="note"></p>'; d.firstChild.textContent = big; d.lastChild.textContent = note + " ";
+    d.lastChild.insertAdjacentHTML("beforeend", `<button class="info" data-info="${key}" aria-label="What does this show?" aria-expanded="false">?</button>`);
+    stats.appendChild(d); };
+  stat(pc(wordSim(tdata.reply, r.reply)), "of the words are shared, in order", "shared");
+  stat(`${wc(tdata.reply)} → ${wc(r.reply)}`, "words long", "length");
+  stat(`${pct(r.lp_original)} → ${pct(r.lp_now)}`, "how strongly it still leans to the original reply", "lean");
+  stat(`${pc(tdata.tone.positive)} → ${pc(r.tone.positive)}`, "chance the tone is positive", "tone");
+  ca.insertAdjacentHTML("beforeend", '<div class="who">Only in the original reply <button class="info" data-info="only" aria-label="What does this show?" aria-expanded="false">?</button></div>'); kwChips(ca, onlyIn(tdata.reply, r.reply, skip), "a");
+  cb.insertAdjacentHTML("beforeend", '<div class="who">Only in the reply with your edits</div>'); kwChips(cb, onlyIn(r.reply, tdata.reply, skip), "b");
+  $("tcompare").textContent = showDiff ? "Highlighted: removed words in pink, new words in teal." : "";
+  renderClouds();
+}
+
+async function trun() {
+  tsample(); tpush();
+  const id = ++tseq;
+  if (tedits.size === 0) {
+    lastRun = null; lastSample = null; $("task1").textContent = tdata.prompt;
+    $("tbadge").innerHTML = ""; $("tcompare").textContent = ""; renderReplies(); return;
+  }
+  $("tbadge").innerHTML = '<span class="badge same">running…</span>';
+  const r = await postJSON("/api/task/run", { text: tdata.prompt, edits: tEditsBody(), reply: tdata.reply });
+  if (id !== tseq) return;
+  lastRun = r; $("task1").textContent = r.prompt;
+  const changed = r.reply.trim() !== tdata.reply.trim();
+  $("tbadge").innerHTML = changed ? '<span class="badge changed">REPLY CHANGED</span>' : '<span class="badge same">same reply</span>';
+  renderReplies();
+}
+
+function trenderWords() {
+  renderChips($("twords"), tdata, tedits, i => tdata.importance[i] ?? 0, tcolour,
+    v => `Deleting this alone: original reply ${v >= 0 ? "less" : "more"} likely by ${Math.abs(v).toFixed(3)} (log-prob per token)`,
+    () => { trenderWords(); trun(); });
+}
+
+async function tanalyse(text) {
+  $("tgo").disabled = true; $("tstatus").textContent = "Running the task, asking why, and testing every word…"; closePop();
+  try {
+    tdata = await postJSON("/api/task/analyze", { text });
+    tedits = new Map(); base = null;
+    $("treply-card").classList.remove("hidden"); $("twords-card").classList.remove("hidden");
+    $("task0").textContent = tdata.prompt; lastRun = null;
+    $("texq").textContent = tdata.explain_prompt; $("texr").textContent = tdata.explain_reply || "(empty)";
+    const box = $("tsaid"); box.textContent = "";
+    namedChips(box, tdata.words, tdata.missing, "Not in your request");
+    if (tdata.missing.length) box.insertAdjacentHTML("beforeend", '<div class="note">Struck-through words are not in your request.</div>');
+    trenderWords(); trun();
+    $("tstatus").textContent = "";
+  } catch (e) {
+    $("tstatus").textContent = "Something went wrong: " + e.message;
+  } finally { $("tgo").disabled = false; }
+}
+
+function tcontent() { return tdata.tokens.map((_, i) => i).filter(i => !tdata.punct[i]); }
+function tset(idx) { tedits = new Map(idx.map(i => [i, ""])); $("sw-msg").textContent = ""; closePop(); trenderWords(); trun(); }
+$("tgo").onclick = () => tanalyse($("ttext").value);
+document.querySelectorAll("[data-tex]").forEach(b => b.onclick = async () => {
+  $("ttext").value = b.dataset.tex;
+  const [from, to] = (b.dataset.swap || "|").split("|");
+  $("sw-from").value = from; $("sw-to").value = to;
+  await tanalyse(b.dataset.tex);
+  if (from) swapAll();
+});
+
+// Replace every occurrence of one word (any case), keeping a leading capital.
+async function swapAll() {
+  if (!tdata || tdata.prompt !== $("ttext").value.trim()) await tanalyse($("ttext").value);
+  if (!tdata) return;
+  const from = $("sw-from").value.trim().toLowerCase(), to = $("sw-to").value.trim();
+  if (!from) return;
+  const hits = tdata.tokens.map((t, i) => [t, i]).filter(([t]) => t.toLowerCase() === from);
+  if (!hits.length) { $("sw-msg").textContent = `"${from}" isn't in your request.`; return; }
+  hits.forEach(([t, i]) => tedits.set(i, to && t[0] !== t[0].toLowerCase() ? to[0].toUpperCase() + to.slice(1) : to));
+  $("sw-msg").textContent = `Swapped ${hits.length} time${hits.length > 1 ? "s" : ""}. Compare the two replies above.`;
+  closePop(); trenderWords(); trun();
+  $("treply-card").scrollIntoView({ behavior: "smooth" });
+}
+$("sw-go").onclick = swapAll;
+["sw-from", "sw-to"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") swapAll(); }));
+$("tdel-named").onclick = () => tset(tdata.named);
+$("tdel-top").onclick = () => tset(tcontent().sort((a, b) => tdata.importance[b] - tdata.importance[a]).slice(0, Math.max(tdata.named.length, 1)));
+$("tdel-rand").onclick = () => tset(tcontent().sort(() => Math.random() - 0.5).slice(0, Math.max(tdata.named.length, 1)));
+$("treset").onclick = () => tset([]);
+$("ttext").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) tanalyse($("ttext").value); });
+</script>
+</body>
+</html>
